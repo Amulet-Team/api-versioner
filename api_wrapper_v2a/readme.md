@@ -1,0 +1,1 @@
+This is the v2 example restructured into modules so we can work out some other issues.
