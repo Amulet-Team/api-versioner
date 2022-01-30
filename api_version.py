@@ -4,9 +4,9 @@ from typing import Dict, Callable
 from contextvars import ContextVar
 
 
-class AbstractAPI(ABC):
+class AbstractAPIManager(ABC):
     """
-    A decorator to store the implementation for each API version.
+    A class to manage the API versions for a given API entry.
     Based on the ContextMajorVersion attribute the implementation can be switched.
     For functions the switching is done in __call__ at runtime.
     For class methods the switching is done at the point __get__ is called to support properties.
@@ -40,17 +40,29 @@ class AbstractAPI(ABC):
     def __init__(self):
         self.__apis: Dict[int, Callable] = {}
 
-    @classmethod
-    def new(cls, version: int):
-        return cls().version(version)
+    def api_version(self, version: int):
+        return self._api_version(version, self)
 
-    def version(self, version: int):
-        if not (1 <= version <= self.LibraryMajorVersion + 1):
+    @classmethod
+    def api_version_classmethod(cls, version: int):
+        return cls._api_version(version)
+
+    @classmethod
+    def _api_version(cls, version: int, self=None):
+        if not isinstance(version, int):
+            raise TypeError("version must be an int")
+        if not (1 <= version <= cls.LibraryMajorVersion + 1):
             raise ValueError(
-                f"version must be between 1 and {self.LibraryMajorVersion + 1}"
+                f"version must be between 1 and {cls.LibraryMajorVersion + 1}"
             )
 
         def wrap(func):
+            nonlocal self
+            if self is None:
+                self = cls()
+
+            if version in self.__apis:
+                raise ValueError(f"API version {version} has already been registered.")
             self.__apis[version] = func
             return self
 
