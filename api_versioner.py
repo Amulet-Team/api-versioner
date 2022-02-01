@@ -1,7 +1,9 @@
+import functools
 from abc import ABC, abstractmethod
 import warnings
-from typing import Dict, Callable
+from typing import Dict, Callable, Optional
 from contextvars import ContextVar
+import inspect
 
 
 class AbstractAPIManager(ABC):
@@ -35,20 +37,15 @@ class AbstractAPIManager(ABC):
         """
         raise NotImplementedError
 
-    __slots__ = "__apis"
+    __slots__ = ("__apis", "__last_version")
 
     def __init__(self):
         self.__apis: Dict[int, Callable] = {}
-
-    def api_version(self, version: int):
-        return self._api_version(version, self)
-
-    @classmethod
-    def api_version_classmethod(cls, version: int):
-        return cls._api_version(version)
+        # track the last version that was defined
+        self.__last_version: Optional[int] = None
 
     @classmethod
-    def _api_version(cls, version: int, self=None):
+    def api_version(cls, version: int):
         if not isinstance(version, int):
             raise TypeError("version must be an int")
         if not (1 <= version <= cls.LibraryMajorVersion + 1):
@@ -57,16 +54,51 @@ class AbstractAPIManager(ABC):
             )
 
         def wrap(func):
-            nonlocal self
-            if self is None:
-                self = cls()
+            self = cls._get_self(func)
 
             if version in self.__apis:
                 raise ValueError(f"API version {version} has already been registered.")
+            self.__last_version = version
             self.__apis[version] = func
             return self
 
         return wrap
+
+    @classmethod
+    def _get_self(cls, func):
+        """Stash the manager instance in a module variable for easy accessing."""
+        # See if an API manager exists for this qualname
+        # If it does use that if not create a new one
+        module = inspect.getmodule(func)
+        qualname = getattr(func, "__qualname__", None)
+        func_ = func
+        if module is None or qualname is None:
+            # If we cannot find the module or qualified name then try our best to find them
+            if isinstance(func, property):
+                func_ = func.fget
+                module = inspect.getmodule(func.fget)
+                qualname = getattr(func.fget, "__qualname__", None)
+            elif hasattr(func, "__func__"):
+                func_ = func.__func__
+                module = inspect.getmodule(func.__func__)
+                qualname = getattr(func.__func__, "__qualname__", None)
+            if module is None or qualname is None:
+                # If all else fails there is nothing we can do
+                raise TypeError(
+                    f"Cannot find module or qualified name for {func}. If you are using a custom decorator you will need to use functools.update_wrapper"
+                )
+        api_managers = getattr(module, "__api_managers__", None)
+        if api_managers is None:
+            api_managers = {}
+            setattr(module, "__api_managers__", api_managers)
+        if qualname in api_managers:
+            self = api_managers[qualname]
+            if self.__class__ is not cls:
+                raise ValueError("Cannot mix different API managers for the same API.")
+        else:
+            self = api_managers[qualname] = cls()
+            functools.update_wrapper(self, func_)
+        return self
 
     def _get_implementation(self):
         """Get the implementation for the callable"""
@@ -101,15 +133,40 @@ class AbstractAPIManager(ABC):
         else:
             raise TypeError("The version set in MajorVersion must be an int.")
 
+    # If the object is a loose function this will get called
     def __call__(self, *args, **kwargs):
         return self._get_implementation()(*args, **kwargs)
 
+    # If the function is attached to a class these will get called on object access which will pass control to the active implementation
     def __get__(self, instance, instancetype):
         # Without this the reference to self is lost
         return self._get_implementation().__get__(instance, instancetype)
 
+    def __set__(self, instance, value):
+        try:
+            return self._get_implementation().__set__(instance, value)
+        except AttributeError:
+            raise AttributeError(f"Cannot set attribute {self.__name__}")
 
-class AbstractLibraryVersion(ABC):
+    def __getattr__(self, item: str):
+        if isinstance(self.__apis[self.__last_version], property):
+            if item in {"getter", "setter", "deleter"}:
+
+                def wrap(func):
+                    self.__apis[self.__last_version] = getattr(
+                        self.__apis[self.__last_version], item
+                    )(func)
+                    return self
+
+                return wrap
+        # I would like to support more here but the result returned from the final decorator must be self
+        # It is unknown weather the function is the decorator or a function that returns the decorator
+        raise AttributeError(
+            f"{self.__class__.__name__} object has no attribute {item}"
+        )
+
+
+class AbstractVersion(ABC):
     @property
     @classmethod
     @abstractmethod

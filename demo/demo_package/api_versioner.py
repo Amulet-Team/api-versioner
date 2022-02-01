@@ -1,6 +1,6 @@
 from contextvars import ContextVar
 
-from api_version import AbstractAPIManager, AbstractLibraryVersion
+from api_versioner import AbstractAPIManager, AbstractVersion
 
 from demo_package import __version__
 
@@ -12,8 +12,8 @@ class DemoPackageAPIManager(AbstractAPIManager):
     ContextMajorVersion = DemoPackageMajorVersion
 
 
-api_version = DemoPackageAPIManager.api_version_classmethod
+api_version = DemoPackageAPIManager.api_version
 
 
-class DemoPackageLibraryVersion(AbstractLibraryVersion):
+class DemoPackageVersion(AbstractVersion):
     ContextMajorVersion = DemoPackageMajorVersion
