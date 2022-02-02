@@ -1,14 +1,24 @@
 from contextvars import ContextVar
+import re
 
 from api_versioner import AbstractAPIManager, AbstractVersion
 
-from demo_package import __version__
+from demo_package import __version__ as version_string
 
-DemoPackageMajorVersion = ContextVar("PackageMajorVersion", default=__version__[0])
+
+# It would be better to do this with the packaging library
+# from packaging.version import Version
+# MajorVersion = Version(version_string).major
+# but that may not be installed so find it with regex
+MajorVersion = int(
+    re.fullmatch(r"(?P<MajorVersion>\d+)\..*", version_string).group("MajorVersion")
+)
+
+DemoPackageMajorVersion = ContextVar("PackageMajorVersion", default=MajorVersion)
 
 
 class DemoPackageAPIManager(AbstractAPIManager):
-    LibraryMajorVersion = __version__[0]
+    LibraryMajorVersion = MajorVersion
     ContextMajorVersion = DemoPackageMajorVersion
 
 
