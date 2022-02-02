@@ -1,7 +1,7 @@
 import functools
 from abc import ABC, abstractmethod
 import warnings
-from typing import Dict, Callable, Optional
+from typing import Dict, Callable
 from contextvars import ContextVar
 import inspect
 
@@ -42,7 +42,7 @@ class AbstractAPIManager(ABC):
     def __init__(self):
         self.__apis: Dict[int, Callable] = {}
         # track the last version that was defined so property setter decorators work
-        self.__last_version: Optional[int] = None
+        self.__last_version: int = 0
         # track the version that update_wrapper was called with
         self.__doc_version: int = 0
 
