@@ -66,7 +66,7 @@ def main():
             print("Error: Properties without a setter should not be settable")
 
     with DemoPackageVersion(3):
-        # Future behaviour
+        # Use the v3 api
         print("example_attr v3 property value", cls.example_attr)
         print("setting property to 10")
         cls.example_attr = 10
