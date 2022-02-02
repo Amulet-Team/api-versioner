@@ -37,12 +37,14 @@ class AbstractAPIManager(ABC):
         """
         raise NotImplementedError
 
-    __slots__ = ("__apis", "__last_version")
+    __slots__ = ("__apis", "__last_version", "__doc_version")
 
     def __init__(self):
         self.__apis: Dict[int, Callable] = {}
-        # track the last version that was defined
+        # track the last version that was defined so property setter decorators work
         self.__last_version: Optional[int] = None
+        # track the version that update_wrapper was called with
+        self.__doc_version: int = 0
 
     @classmethod
     def api_version(cls, version: int):
@@ -54,7 +56,7 @@ class AbstractAPIManager(ABC):
             )
 
         def wrap(func):
-            self = cls._get_self(func)
+            self = cls._get_self(func, version)
 
             if version in self.__apis:
                 raise ValueError(f"API version {version} has already been registered.")
@@ -65,7 +67,7 @@ class AbstractAPIManager(ABC):
         return wrap
 
     @classmethod
-    def _get_self(cls, func):
+    def _get_self(cls, func, version: int):
         """Stash the manager instance in a module variable for easy accessing."""
         # See if an API manager exists for this qualname
         # If it does use that if not create a new one
@@ -97,7 +99,9 @@ class AbstractAPIManager(ABC):
                 raise ValueError("Cannot mix different API managers for the same API.")
         else:
             self = api_managers[qualname] = cls()
+        if self.__doc_version < version <= self.LibraryMajorVersion:
             functools.update_wrapper(self, func_)
+            self.__doc_version = version
         return self
 
     def _get_implementation(self):
